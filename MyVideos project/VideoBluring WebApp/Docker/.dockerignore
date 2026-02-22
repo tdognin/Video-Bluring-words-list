@@ -1,0 +1,116 @@
+# Docker ignore file for VideoBluring WebApp
+# Excludes unnecessary files from Docker build context
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Docker files (avoid recursion)
+Docker/
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation (except README.md which we include)
+*.md
+!README.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node modules (if any)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+__tests__/
+coverage/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+Jenkinsfile
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.backup
+*.old
+*.orig
+
+# Archive files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Media files (examples/demos)
+examples/
+demo/
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+!favicon.ico
+
+# Documentation folders
+docs/
+documentation/
+Documentation/
+
+# License and contribution files
+LICENSE
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+CHANGELOG.md
+
+# Scripts
+scripts/
+*.sh
+!run*.sh

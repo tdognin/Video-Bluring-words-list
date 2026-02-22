@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Blur Tool - Apply Blur Effects to Your Images</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖼️ Image Blur Tool</h1>
+            <p class="subtitle">Apply beautiful blur effects to your images - 100% client-side processing</p>
+        </header>
+
+        <main>
+            <!-- Upload Section -->
+            <section class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <h2>Drop your image here</h2>
+                    <p>or click to browse</p>
+                    <p class="file-info">Supports JPG, PNG, GIF, WebP (max 10MB)</p>
+                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+                </div>
+                <div class="error-message" id="errorMessage"></div>
+            </section>
+
+            <!-- Editor Section -->
+            <section class="editor-section" id="editorSection" style="display: none;">
+                <div class="image-container">
+                    <div class="comparison-view">
+                        <div class="image-wrapper">
+                            <h3>Original</h3>
+                            <canvas id="originalCanvas"></canvas>
+                        </div>
+                        <div class="image-wrapper">
+                            <h3>Blurred</h3>
+                            <canvas id="blurredCanvas"></canvas>
+                            <div class="loading-overlay" id="loadingOverlay">
+                                <div class="spinner"></div>
+                                <p>Processing...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="controls">
+                    <div class="slider-control">
+                        <label for="blurSlider">
+                            <span>Blur Intensity</span>
+                            <span class="blur-value" id="blurValue">0px</span>
+                        </label>
+                        <input type="range" id="blurSlider" min="0" max="20" value="0" step="0.5">
+                        <div class="slider-labels">
+                            <span>0</span>
+                            <span>10</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn btn-primary" id="downloadBtn">
+                            <span class="btn-icon">⬇️</span>
+                            Download Blurred Image
+                        </button>
+                        <button class="btn btn-secondary" id="resetBtn">
+                            <span class="btn-icon">🔄</span>
+                            Upload New Image
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="instructions">
+                    <h3>How to use:</h3>
+                    <ol>
+                        <li>Your image has been uploaded successfully</li>
+                        <li>Use the slider above to adjust the blur intensity (0-20 pixels)</li>
+                        <li>Preview the effect in real-time on the right side</li>
+                        <li>Click "Download Blurred Image" to save your result</li>
+                        <li>Click "Upload New Image" to start over with a different image</li>
+                    </ol>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>🔒 All processing happens locally in your browser - your images never leave your device</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

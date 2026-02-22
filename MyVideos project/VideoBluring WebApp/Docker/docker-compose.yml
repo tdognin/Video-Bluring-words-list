@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Production service
+  videobluring-webapp:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+    container_name: videobluring-webapp-prod
+    image: videobluring-webapp:latest
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      - NGINX_HOST=${NGINX_HOST:-localhost}
+      - NGINX_PORT=${NGINX_PORT:-80}
+    restart: unless-stopped
+    networks:
+      - webapp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.videobluring.description=VideoBluring WebApp Production"
+      - "com.videobluring.version=1.0.0"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Development service with volume mounting for live reload
+  videobluring-webapp-dev:
+    image: nginx:1.25-alpine
+    container_name: videobluring-webapp-dev
+    ports:
+      - "${DEV_PORT:-8081}:80"
+    volumes:
+      - ../index.html:/usr/share/nginx/html/index.html:ro
+      - ../styles.css:/usr/share/nginx/html/styles.css:ro
+      - ../script.js:/usr/share/nginx/html/script.js:ro
+      - ../README.md:/usr/share/nginx/html/README.md:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - webapp-network
+    profiles:
+      - development
+    labels:
+      - "com.videobluring.description=VideoBluring WebApp Development"
+      - "com.videobluring.version=1.0.0-dev"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Nginx reverse proxy (optional, for production with SSL)
+  nginx-proxy:
+    image: nginx:1.25-alpine
+    container_name: videobluring-nginx-proxy
+    ports:
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - videobluring-webapp
+    restart: unless-stopped
+    networks:
+      - webapp-network
+    profiles:
+      - proxy
+    labels:
+      - "com.videobluring.description=Nginx Reverse Proxy"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  webapp-network:
+    driver: bridge
+    name: videobluring-network
+
+# Volumes for persistent data (if needed in future)
+volumes:
+  nginx-cache:
+    driver: local
+    name: videobluring-nginx-cache
+
+# Made with Bob

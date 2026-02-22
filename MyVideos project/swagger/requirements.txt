@@ -1,0 +1,7 @@
+# REST API Server Dependencies
+Flask==3.0.0
+Flask-CORS==4.0.0
+Werkzeug==3.0.1
+
+# Include main project dependencies
+-r ../requirements.txt

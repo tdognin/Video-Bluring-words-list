@@ -1,0 +1,375 @@
+openapi: 3.0.3
+info:
+  title: Video Text Blur API
+  description: |
+    REST API for automatically detecting and blurring text in videos using OCR.
+    
+    This API provides endpoints to:
+    - Upload videos for text blurring
+    - Check processing status
+    - Download processed videos
+    - Configure blur parameters
+    
+    For more information, see the [Documentation](../Documentation/README.md).
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+  - url: https://api.example.com/v1
+    description: Production server
+
+tags:
+  - name: videos
+    description: Video processing operations
+  - name: jobs
+    description: Job status and management
+  - name: health
+    description: Service health checks
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      description: Check if the API service is running
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: 1.0.0
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /videos/blur:
+    post:
+      tags:
+        - videos
+      summary: Submit video for text blurring
+      description: |
+        Upload a video file and configure blur parameters. 
+        Returns a job ID for tracking the processing status.
+      operationId: blurVideo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - video
+              properties:
+                video:
+                  type: string
+                  format: binary
+                  description: Video file (MP4 or MOV format)
+                languages:
+                  type: array
+                  items:
+                    type: string
+                  description: OCR languages to use
+                  default: ["en"]
+                  example: ["en", "fr"]
+                blur_strength:
+                  type: integer
+                  description: Blur strength (must be odd number)
+                  default: 51
+                  minimum: 1
+                  example: 71
+                confidence:
+                  type: number
+                  format: float
+                  description: Text detection confidence threshold (0-1)
+                  default: 0.5
+                  minimum: 0
+                  maximum: 1
+                  example: 0.5
+                sample_rate:
+                  type: integer
+                  description: Process every Nth frame
+                  default: 1
+                  minimum: 1
+                  example: 5
+                padding:
+                  type: integer
+                  description: Padding around text regions in pixels
+                  default: 10
+                  minimum: 0
+                  example: 10
+                words:
+                  type: array
+                  items:
+                    type: string
+                  description: Specific words to blur (optional)
+                  example: ["confidential", "secret"]
+      responses:
+        '202':
+          description: Video accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Video file too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /jobs/{jobId}:
+    get:
+      tags:
+        - jobs
+      summary: Get job status
+      description: Check the processing status of a video blur job
+      operationId: getJobStatus
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Job ID returned from blur request
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Job status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /jobs/{jobId}/result:
+    get:
+      tags:
+        - jobs
+      summary: Download processed video
+      description: Download the blurred video once processing is complete
+      operationId: downloadResult
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Processed video file
+          content:
+            video/mp4:
+              schema:
+                type: string
+                format: binary
+            video/quicktime:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Job not found or result not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '425':
+          description: Processing not yet complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /jobs/{jobId}:
+    delete:
+      tags:
+        - jobs
+      summary: Cancel or delete job
+      description: Cancel a running job or delete a completed job and its results
+      operationId: deleteJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Job deleted successfully
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    JobResponse:
+      type: object
+      required:
+        - job_id
+        - status
+        - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Unique job identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+          description: Current job status
+          example: queued
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2026-02-22T10:00:00Z"
+        estimated_duration:
+          type: integer
+          description: Estimated processing time in seconds
+          example: 120
+
+    JobStatus:
+      type: object
+      required:
+        - job_id
+        - status
+        - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+          example: processing
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-22T10:00:00Z"
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-02-22T10:00:05Z"
+        completed_at:
+          type: string
+          format: date-time
+          example: "2026-02-22T10:02:30Z"
+        progress:
+          type: number
+          format: float
+          description: Processing progress (0-100)
+          minimum: 0
+          maximum: 100
+          example: 45.5
+        input_file:
+          type: string
+          description: Original filename
+          example: "input_video.mp4"
+        output_file:
+          type: string
+          description: Processed filename
+          example: "output_video.mp4"
+        parameters:
+          type: object
+          description: Processing parameters used
+          properties:
+            languages:
+              type: array
+              items:
+                type: string
+              example: ["en"]
+            blur_strength:
+              type: integer
+              example: 51
+            confidence:
+              type: number
+              example: 0.5
+            sample_rate:
+              type: integer
+              example: 5
+            padding:
+              type: integer
+              example: 10
+        error:
+          type: string
+          description: Error message if status is failed
+          example: "Failed to process video: Invalid format"
+        result_url:
+          type: string
+          format: uri
+          description: URL to download result (when completed)
+          example: "/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000/result"
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "INVALID_REQUEST"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Video file is required"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+security:
+  - ApiKeyAuth: []
+
+# Made with Bob
