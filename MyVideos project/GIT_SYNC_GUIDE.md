@@ -44,7 +44,16 @@ git remote set-url origin git@github.com:tdognin/Video-Bluring-words-list.git
 **Option B: Using HTTPS with Token**
 ```bash
 # Update the remote URL to use HTTPS with your personal access token
-git remote set-url origin https://tdognin:YOUR_GITHUB_TOKEN@github.com/tdognin/Video-Bluring-words-list.git
+# Replace YOUR_USERNAME with your GitHub username
+# Replace YOUR_TOKEN with your actual personal access token
+git remote set-url origin https://YOUR_USERNAME:YOUR_TOKEN@github.com/tdognin/Video-Bluring-words-list.git
+```
+
+**Note:** For better security, use Git Credential Manager instead of embedding tokens in URLs:
+```bash
+# Use HTTPS without token in URL
+git remote set-url origin https://github.com/tdognin/Video-Bluring-words-list.git
+# Git will prompt for credentials and store them securely
 ```
 
 **Verify the change:**
