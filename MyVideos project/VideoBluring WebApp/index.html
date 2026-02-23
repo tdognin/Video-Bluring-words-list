@@ -3,94 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Blur Tool - Apply Blur Effects to Your Images</title>
+    <title>Video Text Blur Tool - Blur Text in Videos</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🖼️ Image Blur Tool</h1>
-            <p class="subtitle">Apply beautiful blur effects to your images - 100% client-side processing</p>
+            <h1>🎥 Video Text Blur Tool</h1>
+            <p class="subtitle">Upload videos to blur text using our API - Secure server-side processing</p>
         </header>
 
         <main>
             <!-- Upload Section -->
             <section class="upload-section" id="uploadSection">
                 <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">📁</div>
-                    <h2>Drop your image here</h2>
+                    <div class="upload-icon">🎬</div>
+                    <h2>Drop your video here</h2>
                     <p>or click to browse</p>
-                    <p class="file-info">Supports JPG, PNG, GIF, WebP (max 10MB)</p>
-                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+                    <p class="file-info">Supports MP4, MOV (max 500MB)</p>
+                    <input type="file" id="fileInput" accept="video/mp4,video/quicktime" hidden>
                 </div>
                 <div class="error-message" id="errorMessage"></div>
             </section>
 
-            <!-- Editor Section -->
+            <!-- Processing Section -->
             <section class="editor-section" id="editorSection" style="display: none;">
-                <div class="image-container">
-                    <div class="comparison-view">
-                        <div class="image-wrapper">
-                            <h3>Original</h3>
-                            <canvas id="originalCanvas"></canvas>
-                        </div>
-                        <div class="image-wrapper">
-                            <h3>Blurred</h3>
-                            <canvas id="blurredCanvas"></canvas>
-                            <div class="loading-overlay" id="loadingOverlay">
-                                <div class="spinner"></div>
-                                <p>Processing...</p>
-                            </div>
-                        </div>
-                    </div>
+                <div class="video-info" id="videoInfo">
+                    <h3>📹 Video Information</h3>
+                    <p><strong>File:</strong> <span id="fileName"></span></p>
+                    <p><strong>Size:</strong> <span id="fileSize"></span></p>
+                    <p><strong>Status:</strong> <span id="status">Ready to process</span></p>
                 </div>
 
                 <!-- Controls -->
                 <div class="controls">
-                    <div class="slider-control">
-                        <label for="blurSlider">
-                            <span>Blur Intensity</span>
-                            <span class="blur-value" id="blurValue">0px</span>
-                        </label>
-                        <input type="range" id="blurSlider" min="0" max="20" value="0" step="0.5">
-                        <div class="slider-labels">
-                            <span>0</span>
-                            <span>10</span>
-                            <span>20</span>
-                        </div>
+                    <div class="form-group">
+                        <label for="wordsInput">Words to Blur (comma-separated)</label>
+                        <input type="text" id="wordsInput" placeholder="e.g., password, email, confidential" />
+                        <small>Leave empty to blur all detected text</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="blurStrength">Blur Strength: <span id="blurStrengthValue">51</span></label>
+                        <input type="range" id="blurStrength" min="11" max="101" value="51" step="2">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sampleRate">Sample Rate (process every N frames): <span id="sampleRateValue">5</span></label>
+                        <input type="range" id="sampleRate" min="1" max="30" value="5" step="1">
                     </div>
 
                     <div class="button-group">
-                        <button class="btn btn-primary" id="downloadBtn">
-                            <span class="btn-icon">⬇️</span>
-                            Download Blurred Image
+                        <button class="btn btn-primary" id="processBtn">
+                            <span class="btn-icon">⚙️</span>
+                            Process Video
                         </button>
                         <button class="btn btn-secondary" id="resetBtn">
                             <span class="btn-icon">🔄</span>
-                            Upload New Image
+                            Upload New Video
                         </button>
                     </div>
+                </div>
+
+                <!-- Progress Section -->
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <h3>Processing Progress</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">0%</p>
+                </div>
+
+                <!-- Download Section -->
+                <div class="download-section" id="downloadSection" style="display: none;">
+                    <h3>✅ Processing Complete!</h3>
+                    <button class="btn btn-success" id="downloadBtn">
+                        <span class="btn-icon">⬇️</span>
+                        Download Blurred Video
+                    </button>
                 </div>
 
                 <!-- Instructions -->
                 <div class="instructions">
                     <h3>How to use:</h3>
                     <ol>
-                        <li>Your image has been uploaded successfully</li>
-                        <li>Use the slider above to adjust the blur intensity (0-20 pixels)</li>
-                        <li>Preview the effect in real-time on the right side</li>
-                        <li>Click "Download Blurred Image" to save your result</li>
-                        <li>Click "Upload New Image" to start over with a different image</li>
+                        <li>Your video has been uploaded successfully</li>
+                        <li>Enter specific words to blur (optional - leave empty to blur all text)</li>
+                        <li>Adjust blur strength and sample rate as needed</li>
+                        <li>Click "Process Video" to start text blurring</li>
+                        <li>Wait for processing to complete (may take several minutes)</li>
+                        <li>Download your blurred video when ready</li>
                     </ol>
                 </div>
             </section>
         </main>
 
         <footer>
-            <p>🔒 All processing happens locally in your browser - your images never leave your device</p>
+            <p>🔒 Videos are processed securely on our server - API endpoint: http://localhost:8000</p>
         </footer>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2.0"></script>
 </body>
 </html>

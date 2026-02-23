@@ -41,6 +41,7 @@ paths:
       summary: Health check
       description: Check if the API service is running
       operationId: healthCheck
+      security: []  # Override global security - health check is public
       responses:
         '200':
           description: Service is healthy
@@ -175,6 +176,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - jobs
+      summary: Cancel or delete job
+      description: Cancel a running job or delete a completed job and its results
+      operationId: deleteJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: Job ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Job deleted successfully
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /jobs/{jobId}/result:
     get:
@@ -211,31 +235,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         '425':
           description: Processing not yet complete
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-  /jobs/{jobId}:
-    delete:
-      tags:
-        - jobs
-      summary: Cancel or delete job
-      description: Cancel a running job or delete a completed job and its results
-      operationId: deleteJob
-      parameters:
-        - name: jobId
-          in: path
-          required: true
-          description: Job ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Job deleted successfully
-        '404':
-          description: Job not found
           content:
             application/json:
               schema:
@@ -298,12 +297,11 @@ components:
           format: date-time
           example: "2026-02-22T10:02:30Z"
         progress:
-          type: number
-          format: float
+          type: integer
           description: Processing progress (0-100)
           minimum: 0
           maximum: 100
-          example: 45.5
+          example: 45
         input_file:
           type: string
           description: Original filename
@@ -333,6 +331,12 @@ components:
             padding:
               type: integer
               example: 10
+            words:
+              type: array
+              items:
+                type: string
+              description: Specific words to blur (if specified)
+              example: ["confidential"]
         error:
           type: string
           description: Error message if status is failed

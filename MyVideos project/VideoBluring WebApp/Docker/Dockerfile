@@ -4,11 +4,11 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy application files
-COPY ../index.html ./
-COPY ../styles.css ./
-COPY ../script.js ./
-COPY ../README.md ./
+# Copy application files (context is parent directory)
+COPY index.html ./
+COPY styles.css ./
+COPY script.js ./
+COPY README.md ./
 
 # Stage 2: Production stage with Nginx
 FROM nginx:1.25-alpine AS production
@@ -20,8 +20,8 @@ RUN apk add --no-cache curl
 RUN rm -rf /usr/share/nginx/html/*
 RUN rm /etc/nginx/conf.d/default.conf
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy custom nginx configuration (from Docker subdirectory)
+COPY Docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy application files from builder stage
 COPY --from=builder /app/index.html /usr/share/nginx/html/
@@ -43,13 +43,10 @@ RUN mkdir -p /var/cache/nginx/client_temp && \
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/ || exit 1
+    CMD curl -f http://localhost:8080/ || exit 1
 
-# Expose port 80
-EXPOSE 80
+# Expose port 8080
+EXPOSE 8080
 
-# Use non-root user for security
-USER nginx
-
-# Start nginx
+# Start nginx (run as root to avoid permission issues)
 CMD ["nginx", "-g", "daemon off;"]
