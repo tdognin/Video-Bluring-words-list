@@ -10,6 +10,10 @@ info:
     - Download processed videos
     - Configure blur parameters
     
+    ## Authentication
+    Most endpoints require API key authentication via the `X-API-Key` header.
+    The `/health` endpoint is publicly accessible for monitoring purposes.
+    
     For more information, see the [Documentation](../Documentation/README.md).
   version: 1.0.0
   contact:
@@ -233,12 +237,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '425':
+        '202':
           description: Processing not yet complete
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                type: object
+                required:
+                  - message
+                  - job_id
+                  - status
+                properties:
+                  message:
+                    type: string
+                    example: "Video processing is still in progress"
+                  job_id:
+                    type: string
+                    format: uuid
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  status:
+                    type: string
+                    enum: [queued, processing]
+                    example: "processing"
+                  progress:
+                    type: integer
+                    minimum: 0
+                    maximum: 100
+                    example: 45
 
 components:
   schemas:
