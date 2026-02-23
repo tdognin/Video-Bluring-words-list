@@ -1,16 +1,32 @@
 # API Reference
 
-Complete API documentation for the Video Text Blur Tool.
+Complete API documentation for the Video Text Blur Tool, including Python API, REST API, and Web Application interfaces.
 
 ---
 
 ## Table of Contents
 
-1. [VideoTextBlur Class](#videotextblur-class)
-2. [Methods](#methods)
-3. [Command-Line Interface](#command-line-interface)
-4. [Python API Examples](#python-api-examples)
+1. [Python API](#python-api)
+   - [VideoTextBlur Class](#videotextblur-class)
+   - [Methods](#methods)
+   - [Python API Examples](#python-api-examples)
+2. [REST API](#rest-api)
+   - [Overview](#rest-api-overview)
+   - [Authentication](#authentication)
+   - [Endpoints](#endpoints)
+   - [Request/Response Schemas](#requestresponse-schemas)
+   - [REST API Examples](#rest-api-examples)
+3. [Web Application](#web-application)
+4. [Command-Line Interface](#command-line-interface)
 5. [Return Values and Exceptions](#return-values-and-exceptions)
+
+---
+
+## Python API
+
+### Python API Overview
+
+The Python API provides programmatic access to video text blurring functionality through the `VideoTextBlur` class.
 
 ---
 
@@ -541,6 +557,549 @@ processor.process_video(
 
 ---
 
+
+---
+
+## REST API
+
+### REST API Overview
+
+The Video Text Blur REST API provides HTTP endpoints for video processing operations. The API follows RESTful principles and uses JSON for request/response payloads.
+
+**Base URL**: `http://localhost:8000/api/v1`
+
+**API Specification**: OpenAPI 3.0 (see `swagger/openapi.yaml`)
+
+**Interactive Documentation**: Available via Swagger UI
+
+### Authentication
+
+Most endpoints require API key authentication via the `X-API-Key` header.
+
+```bash
+curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/jobs/{jobId}
+```
+
+**Public Endpoints** (no authentication required):
+- `GET /api/v1/health` - Health check
+
+**Note**: API key authentication is optional in development mode. Set the `API_KEY` environment variable to enable it.
+
+### Endpoints
+
+#### Health Check
+
+Check if the API service is running.
+
+**Endpoint**: `GET /api/v1/health`
+
+**Authentication**: None required
+
+**Response**: `200 OK`
+
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "timestamp": "2026-02-23T10:00:00Z"
+}
+```
+
+**Example**:
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+---
+
+#### Submit Video for Blurring
+
+Upload a video file and configure blur parameters. Returns a job ID for tracking.
+
+**Endpoint**: `POST /api/v1/videos/blur`
+
+**Authentication**: API Key (optional in dev mode)
+
+**Content-Type**: `multipart/form-data`
+
+**Request Parameters**:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `video` | file | Yes | - | Video file (MP4 or MOV format) |
+| `languages` | array[string] | No | `["en"]` | OCR languages to use |
+| `blur_strength` | integer | No | `51` | Blur strength (must be odd number) |
+| `confidence` | float | No | `0.5` | Text detection confidence threshold (0-1) |
+| `sample_rate` | integer | No | `1` | Process every Nth frame |
+| `padding` | integer | No | `10` | Padding around text regions in pixels |
+| `words` | array[string] | No | `null` | Specific words to blur (optional) |
+
+**Response**: `202 Accepted`
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued",
+  "created_at": "2026-02-23T10:00:00Z",
+  "estimated_duration": 120
+}
+```
+
+**Error Responses**:
+- `400 Bad Request` - Invalid request parameters
+- `413 Payload Too Large` - Video file exceeds size limit (500MB)
+- `415 Unsupported Media Type` - Invalid video format
+
+**Example**:
+```bash
+curl -X POST http://localhost:8000/api/v1/videos/blur \
+  -F "video=@input.mp4" \
+  -F "blur_strength=71" \
+  -F "sample_rate=5" \
+  -F "languages=en" \
+  -F "languages=fr" \
+  -F "words=password" \
+  -F "words=email"
+```
+
+---
+
+#### Get Job Status
+
+Check the processing status of a video blur job.
+
+**Endpoint**: `GET /api/v1/jobs/{jobId}`
+
+**Authentication**: API Key (optional in dev mode)
+
+**Path Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `jobId` | string (UUID) | Job ID returned from blur request |
+
+**Response**: `200 OK`
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "created_at": "2026-02-23T10:00:00Z",
+  "started_at": "2026-02-23T10:00:05Z",
+  "progress": 45,
+  "input_file": "input.mp4",
+  "output_file": "output.mp4",
+  "parameters": {
+    "languages": ["en"],
+    "blur_strength": 51,
+    "confidence": 0.5,
+    "sample_rate": 5,
+    "padding": 10,
+    "words": ["password"]
+  }
+}
+```
+
+**Status Values**:
+- `queued` - Job is waiting to be processed
+- `processing` - Job is currently being processed
+- `completed` - Job completed successfully
+- `failed` - Job failed with error
+
+**Error Responses**:
+- `404 Not Found` - Job ID not found
+
+**Example**:
+```bash
+curl http://localhost:8000/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+#### Download Processed Video
+
+Download the blurred video once processing is complete.
+
+**Endpoint**: `GET /api/v1/jobs/{jobId}/result`
+
+**Authentication**: API Key (optional in dev mode)
+
+**Path Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `jobId` | string (UUID) | Job ID |
+
+**Response**: `200 OK`
+
+**Content-Type**: `video/mp4` or `video/quicktime`
+
+Returns the processed video file as binary data.
+
+**Error Responses**:
+- `404 Not Found` - Job not found or result not available
+- `202 Accepted` - Processing not yet complete (returns status JSON)
+
+**Example**:
+```bash
+# Download with original filename
+curl -O -J http://localhost:8000/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000/result
+
+# Download to specific file
+curl -o output.mp4 http://localhost:8000/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000/result
+```
+
+---
+
+#### Delete Job
+
+Cancel a running job or delete a completed job and its results.
+
+**Endpoint**: `DELETE /api/v1/jobs/{jobId}`
+
+**Authentication**: API Key (optional in dev mode)
+
+**Path Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `jobId` | string (UUID) | Job ID |
+
+**Response**: `204 No Content`
+
+**Error Responses**:
+- `404 Not Found` - Job not found
+
+**Example**:
+```bash
+curl -X DELETE http://localhost:8000/api/v1/jobs/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+### Request/Response Schemas
+
+#### JobResponse Schema
+
+```json
+{
+  "job_id": "string (UUID)",
+  "status": "queued | processing | completed | failed",
+  "created_at": "string (ISO 8601 datetime)",
+  "estimated_duration": "integer (seconds)"
+}
+```
+
+#### JobStatus Schema
+
+```json
+{
+  "job_id": "string (UUID)",
+  "status": "queued | processing | completed | failed",
+  "created_at": "string (ISO 8601 datetime)",
+  "started_at": "string (ISO 8601 datetime, optional)",
+  "completed_at": "string (ISO 8601 datetime, optional)",
+  "progress": "integer (0-100)",
+  "input_file": "string",
+  "output_file": "string",
+  "parameters": {
+    "languages": ["string"],
+    "blur_strength": "integer",
+    "confidence": "float",
+    "sample_rate": "integer",
+    "padding": "integer",
+    "words": ["string"] or null
+  },
+  "error": "string (optional)",
+  "result_url": "string (optional)"
+}
+```
+
+#### Error Schema
+
+```json
+{
+  "error": "string (error code)",
+  "message": "string (human-readable message)",
+  "details": {
+    "additional": "error details"
+  }
+}
+```
+
+---
+
+### REST API Examples
+
+#### Example 1: Complete Workflow
+
+```bash
+# 1. Submit video for processing
+RESPONSE=$(curl -s -X POST http://localhost:8000/api/v1/videos/blur \
+  -F "video=@input.mp4" \
+  -F "blur_strength=71" \
+  -F "sample_rate=5")
+
+# 2. Extract job ID
+JOB_ID=$(echo $RESPONSE | jq -r '.job_id')
+echo "Job ID: $JOB_ID"
+
+# 3. Poll for completion
+while true; do
+  STATUS=$(curl -s http://localhost:8000/api/v1/jobs/$JOB_ID | jq -r '.status')
+  echo "Status: $STATUS"
+  
+  if [ "$STATUS" = "completed" ]; then
+    break
+  elif [ "$STATUS" = "failed" ]; then
+    echo "Job failed!"
+    exit 1
+  fi
+  
+  sleep 5
+done
+
+# 4. Download result
+curl -O -J http://localhost:8000/api/v1/jobs/$JOB_ID/result
+echo "Download complete!"
+```
+
+#### Example 2: Python Client
+
+```python
+import requests
+import time
+from pathlib import Path
+
+class VideoBlurClient:
+    def __init__(self, base_url="http://localhost:8000/api/v1"):
+        self.base_url = base_url
+    
+    def submit_video(self, video_path, **params):
+        """Submit video for processing."""
+        with open(video_path, 'rb') as f:
+            files = {'video': f}
+            response = requests.post(
+                f"{self.base_url}/videos/blur",
+                files=files,
+                data=params
+            )
+        response.raise_for_status()
+        return response.json()['job_id']
+    
+    def get_status(self, job_id):
+        """Get job status."""
+        response = requests.get(f"{self.base_url}/jobs/{job_id}")
+        response.raise_for_status()
+        return response.json()
+    
+    def download_result(self, job_id, output_path):
+        """Download processed video."""
+        response = requests.get(f"{self.base_url}/jobs/{job_id}/result")
+        response.raise_for_status()
+        
+        with open(output_path, 'wb') as f:
+            f.write(response.content)
+    
+    def process_video(self, video_path, output_path, **params):
+        """Complete workflow: submit, wait, download."""
+        # Submit
+        job_id = self.submit_video(video_path, **params)
+        print(f"Job submitted: {job_id}")
+        
+        # Wait for completion
+        while True:
+            status = self.get_status(job_id)
+            print(f"Status: {status['status']} - Progress: {status.get('progress', 0)}%")
+            
+            if status['status'] == 'completed':
+                break
+            elif status['status'] == 'failed':
+                raise Exception(f"Job failed: {status.get('error')}")
+            
+            time.sleep(5)
+        
+        # Download
+        self.download_result(job_id, output_path)
+        print(f"Video saved to: {output_path}")
+
+# Usage
+client = VideoBlurClient()
+client.process_video(
+    'input.mp4',
+    'output.mp4',
+    blur_strength=71,
+    sample_rate=5,
+    languages=['en', 'fr'],
+    words=['password', 'email']
+)
+```
+
+#### Example 3: JavaScript/Node.js Client
+
+```javascript
+const axios = require('axios');
+const FormData = require('form-data');
+const fs = require('fs');
+
+class VideoBlurClient {
+  constructor(baseURL = 'http://localhost:8000/api/v1') {
+    this.baseURL = baseURL;
+  }
+
+  async submitVideo(videoPath, params = {}) {
+    const form = new FormData();
+    form.append('video', fs.createReadStream(videoPath));
+    
+    Object.entries(params).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach(v => form.append(key, v));
+      } else {
+        form.append(key, value);
+      }
+    });
+
+    const response = await axios.post(
+      `${this.baseURL}/videos/blur`,
+      form,
+      { headers: form.getHeaders() }
+    );
+    
+    return response.data.job_id;
+  }
+
+  async getStatus(jobId) {
+    const response = await axios.get(`${this.baseURL}/jobs/${jobId}`);
+    return response.data;
+  }
+
+  async downloadResult(jobId, outputPath) {
+    const response = await axios.get(
+      `${this.baseURL}/jobs/${jobId}/result`,
+      { responseType: 'stream' }
+    );
+    
+    const writer = fs.createWriteStream(outputPath);
+    response.data.pipe(writer);
+    
+    return new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+  }
+
+  async processVideo(videoPath, outputPath, params = {}) {
+    // Submit
+    const jobId = await this.submitVideo(videoPath, params);
+    console.log(`Job submitted: ${jobId}`);
+    
+    // Wait for completion
+    while (true) {
+      const status = await this.getStatus(jobId);
+      console.log(`Status: ${status.status} - Progress: ${status.progress || 0}%`);
+      
+      if (status.status === 'completed') {
+        break;
+      } else if (status.status === 'failed') {
+        throw new Error(`Job failed: ${status.error}`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    
+    // Download
+    await this.downloadResult(jobId, outputPath);
+    console.log(`Video saved to: ${outputPath}`);
+  }
+}
+
+// Usage
+const client = new VideoBlurClient();
+client.processVideo('input.mp4', 'output.mp4', {
+  blur_strength: 71,
+  sample_rate: 5,
+  languages: ['en', 'fr'],
+  words: ['password', 'email']
+}).catch(console.error);
+```
+
+---
+
+## Web Application
+
+### Web Application Overview
+
+The Video Blurring Web Application provides a browser-based interface for video text blurring with client-side processing.
+
+**URL**: `http://localhost:8080` (when running with Docker)
+
+**Features**:
+- Client-side video processing (no server upload required)
+- Real-time preview
+- Drag-and-drop file upload
+- Configurable blur parameters
+- Progress tracking
+- Download processed video
+
+### Web Application Usage
+
+1. **Access the Application**:
+   ```bash
+   # Using Docker
+   cd "VideoBluring WebApp/Docker"
+   docker-compose up -d
+   open http://localhost:8080
+   ```
+
+2. **Upload Video**:
+   - Drag and drop video file or click to browse
+   - Supported formats: MP4, MOV
+
+3. **Configure Settings**:
+   - Blur strength: Adjust slider (1-100)
+   - Sample rate: Process every Nth frame
+   - Languages: Select OCR languages
+   - Target words: Enter specific words to blur
+
+4. **Process Video**:
+   - Click "Process Video" button
+   - Monitor progress bar
+   - Preview results in real-time
+
+5. **Download Result**:
+   - Click "Download" button when complete
+   - Video saved to your downloads folder
+
+### Web Application API
+
+The web application uses the browser's File API and Web Workers for client-side processing:
+
+```javascript
+// Example: Process video in browser
+const processor = new VideoProcessor({
+  blurStrength: 71,
+  sampleRate: 5,
+  languages: ['en'],
+  targetWords: ['password', 'email']
+});
+
+processor.on('progress', (percent) => {
+  console.log(`Progress: ${percent}%`);
+});
+
+processor.on('complete', (blob) => {
+  // Download processed video
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'output.mp4';
+  a.click();
+});
+
+processor.processVideo(videoFile);
+```
+
+---
 ## Version Information
 
 **API Version**: 1.0.0  
@@ -552,9 +1111,21 @@ processor.process_video(
 ## See Also
 
 - [README.md](README.md) - Quick start guide
+- [SWAGGER_API.md](SWAGGER_API.md) - Detailed Swagger/OpenAPI documentation
+- [DOCKER.md](DOCKER.md) - Docker deployment guide
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
 - [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) - Comprehensive technical reference
 - [UPDATED_FEATURES.md](UPDATED_FEATURES.md) - Feature documentation
 - [example_usage.py](../example_usage.py) - Code examples
+- [swagger/openapi.yaml](../swagger/openapi.yaml) - OpenAPI specification
+- [swagger/README.md](../swagger/README.md) - REST API server documentation
+- [VideoBluring WebApp/Docker/README.md](../VideoBluring%20WebApp/Docker/README.md) - Docker setup guide
+
+---
+
+**API Reference Version**: 2.0.0
+**Last Updated**: February 23, 2026
+**Includes**: Python API, REST API, Web Application
 
 ---
 

@@ -9,14 +9,17 @@ Comprehensive architecture documentation for the Video Text Blur Tool.
 1. [System Overview](#system-overview)
 2. [Architecture Diagram](#architecture-diagram)
 3. [Component Architecture](#component-architecture)
-4. [Data Flow](#data-flow)
-5. [Technology Stack](#technology-stack)
-6. [Design Patterns](#design-patterns)
-7. [Processing Pipeline](#processing-pipeline)
-8. [Memory Management](#memory-management)
-9. [Performance Architecture](#performance-architecture)
-10. [Security Architecture](#security-architecture)
-11. [Extensibility](#extensibility)
+4. [REST API Architecture](#rest-api-architecture)
+5. [Web Application Architecture](#web-application-architecture)
+6. [Docker Architecture](#docker-architecture)
+7. [Data Flow](#data-flow)
+8. [Technology Stack](#technology-stack)
+9. [Design Patterns](#design-patterns)
+10. [Processing Pipeline](#processing-pipeline)
+11. [Memory Management](#memory-management)
+12. [Performance Architecture](#performance-architecture)
+13. [Security Architecture](#security-architecture)
+14. [Extensibility](#extensibility)
 
 ---
 
@@ -253,6 +256,659 @@ Blur Application → Frame Writing → Format Conversion → Output Video
 ```python
 frame: np.ndarray  # Shape: (height, width, 3), dtype: uint8, format: BGR
 ```
+
+
+---
+
+## REST API Architecture
+
+### API Server Overview
+
+The REST API server provides HTTP endpoints for video text blurring operations using a Flask-based architecture.
+
+**Location**: `swagger/api_server.py`
+
+**Framework**: Flask with Flask-CORS
+
+**API Specification**: OpenAPI 3.0 (`swagger/openapi.yaml`)
+
+### API Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Client Layer                             │
+├─────────────────────────────────────────────────────────────────┤
+│  HTTP Clients  │  cURL  │  Python SDK  │  JavaScript SDK  │  Web │
+└─────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      API Gateway Layer                           │
+├─────────────────────────────────────────────────────────────────┤
+│  Flask Application  │  CORS Handler  │  Request Validator       │
+└─────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Routing Layer                               │
+├─────────────────────────────────────────────────────────────────┤
+│  /health  │  /videos/blur  │  /jobs/{id}  │  /jobs/{id}/result │
+└─────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Business Logic Layer                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Job Manager  │  File Handler  │  Video Processor  │  Validator │
+└─────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Processing Layer                            │
+├─────────────────────────────────────────────────────────────────┤
+│  VideoTextBlur  │  Threading  │  Progress Tracking  │  Cleanup  │
+└─────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Storage Layer                               │
+├─────────────────────────────────────────────────────────────────┤
+│  uploads/  │  outputs/  │  In-Memory Jobs Dict  │  File System  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### API Components
+
+#### 1. Flask Application
+
+**Responsibilities**:
+- HTTP request handling
+- Route management
+- Response formatting
+- Error handling
+
+**Configuration**:
+```python
+app = Flask(__name__, static_folder='static', template_folder='templates')
+CORS(app)  # Enable cross-origin requests
+
+# Configuration
+UPLOAD_FOLDER = Path('uploads')
+OUTPUT_FOLDER = Path('outputs')
+MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
+```
+
+#### 2. Job Manager
+
+**Responsibilities**:
+- Job creation and tracking
+- Status management
+- Progress updates
+- Job cleanup
+
+**Data Structure**:
+```python
+jobs: Dict[str, Dict] = {
+    "job_id": {
+        "status": "queued|processing|completed|failed",
+        "created_at": "ISO 8601 timestamp",
+        "started_at": "ISO 8601 timestamp",
+        "completed_at": "ISO 8601 timestamp",
+        "progress": 0-100,
+        "input_path": "path/to/input.mp4",
+        "output_path": "path/to/output.mp4",
+        "parameters": {...},
+        "error": "error message if failed"
+    }
+}
+```
+
+#### 3. Asynchronous Processing
+
+**Threading Model**:
+```python
+def process_video_async(job_id, input_path, output_path, params):
+    """Process video in background thread"""
+    try:
+        # Update status to processing
+        jobs[job_id]['status'] = 'processing'
+        jobs[job_id]['started_at'] = datetime.utcnow().isoformat()
+        
+        # Create processor
+        processor = VideoTextBlur(
+            languages=params.get('languages', ['en']),
+            blur_strength=params.get('blur_strength', 51),
+            confidence_threshold=params.get('confidence', 0.5),
+            target_words=params.get('words')
+        )
+        
+        # Process video
+        processor.process_video(
+            input_path,
+            output_path,
+            sample_rate=params.get('sample_rate', 1),
+            padding=params.get('padding', 10)
+        )
+        
+        # Update status to completed
+        jobs[job_id]['status'] = 'completed'
+        jobs[job_id]['completed_at'] = datetime.utcnow().isoformat()
+        
+    except Exception as e:
+        jobs[job_id]['status'] = 'failed'
+        jobs[job_id]['error'] = str(e)
+
+# Start processing in background
+thread = threading.Thread(
+    target=process_video_async,
+    args=(job_id, input_path, output_path, params)
+)
+thread.daemon = True
+thread.start()
+```
+
+#### 4. File Management
+
+**Upload Handling**:
+```python
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'mp4', 'mov'}
+
+# Save uploaded file
+file = request.files['video']
+if file and allowed_file(file.filename):
+    filename = secure_filename(file.filename)
+    filepath = UPLOAD_FOLDER / f"{job_id}_{filename}"
+    file.save(filepath)
+```
+
+**Cleanup Strategy**:
+```python
+def cleanup_old_jobs():
+    """Remove jobs older than 24 hours"""
+    while True:
+        current_time = datetime.utcnow()
+        with jobs_lock:
+            for job_id, job in list(jobs.items()):
+                age = current_time - datetime.fromisoformat(job['created_at'])
+                if age > timedelta(hours=24):
+                    # Delete files
+                    Path(job['input_path']).unlink(missing_ok=True)
+                    Path(job['output_path']).unlink(missing_ok=True)
+                    # Remove job
+                    del jobs[job_id]
+        time.sleep(3600)  # Run every hour
+```
+
+### API Endpoints Architecture
+
+#### POST /api/v1/videos/blur
+
+**Flow**:
+1. Validate request (file present, size, format)
+2. Generate unique job ID (UUID)
+3. Save uploaded file
+4. Create job entry
+5. Start background processing thread
+6. Return job ID immediately (202 Accepted)
+
+#### GET /api/v1/jobs/{jobId}
+
+**Flow**:
+1. Validate job ID format
+2. Look up job in dictionary
+3. Return job status and metadata
+4. Include progress if processing
+
+#### GET /api/v1/jobs/{jobId}/result
+
+**Flow**:
+1. Validate job ID
+2. Check job status
+3. If completed: stream video file
+4. If processing: return 202 with status
+5. If failed: return 404 with error
+
+#### DELETE /api/v1/jobs/{jobId}
+
+**Flow**:
+1. Validate job ID
+2. Delete input/output files
+3. Remove job from dictionary
+4. Return 204 No Content
+
+### API Security Architecture
+
+**Authentication**:
+- Optional API key via `X-API-Key` header
+- Environment variable: `API_KEY`
+- Public endpoints: `/health`
+
+**Input Validation**:
+- File size limits (500MB)
+- File type validation (MP4, MOV)
+- Parameter range validation
+- Secure filename handling
+
+**CORS Configuration**:
+```python
+CORS(app)  # Allow all origins in development
+# Production: CORS(app, origins=['https://example.com'])
+```
+
+---
+
+## Web Application Architecture
+
+### Web App Overview
+
+The VideoBluring WebApp is a client-side single-page application for video text blurring with browser-based processing.
+
+**Location**: `VideoBluring WebApp/`
+
+**Type**: Static web application
+
+**Server**: Nginx (when using Docker)
+
+**Processing**: Client-side JavaScript
+
+### Web Application Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Browser Environment                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Presentation Layer                       │ │
+│  ├────────────────────────────────────────────────────────────┤ │
+│  │  index.html  │  styles.css  │  UI Components  │  Forms     │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Application Layer                        │ │
+│  ├────────────────────────────────────────────────────────────┤ │
+│  │  script.js  │  Event Handlers  │  State Management         │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Processing Layer                         │ │
+│  ├────────────────────────────────────────────────────────────┤ │
+│  │  Video Processor  │  Web Workers  │  Canvas API  │  OCR    │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Browser APIs                             │ │
+│  ├────────────────────────────────────────────────────────────┤ │
+│  │  File API  │  Blob API  │  Canvas  │  Video Element        │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Web App Components
+
+#### 1. User Interface (index.html)
+
+**Structure**:
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Text Blur Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- File Upload -->
+    <input type="file" id="videoInput" accept="video/mp4,video/quicktime">
+    
+    <!-- Configuration -->
+    <div class="controls">
+        <input type="range" id="blurStrength" min="1" max="100">
+        <input type="number" id="sampleRate" min="1" max="30">
+        <input type="text" id="targetWords">
+    </div>
+    
+    <!-- Processing -->
+    <button id="processBtn">Process Video</button>
+    <progress id="progressBar" value="0" max="100"></progress>
+    
+    <!-- Preview -->
+    <video id="preview" controls></video>
+    
+    <!-- Download -->
+    <button id="downloadBtn">Download Result</button>
+    
+    <script src="script.js"></script>
+</body>
+</html>
+```
+
+#### 2. Application Logic (script.js)
+
+**Key Functions**:
+```javascript
+class VideoProcessor {
+    constructor(config) {
+        this.blurStrength = config.blurStrength;
+        this.sampleRate = config.sampleRate;
+        this.targetWords = config.targetWords;
+    }
+    
+    async processVideo(videoFile) {
+        // Load video
+        const video = await this.loadVideo(videoFile);
+        
+        // Extract frames
+        const frames = await this.extractFrames(video);
+        
+        // Process frames (with Web Worker)
+        const processedFrames = await this.processFrames(frames);
+        
+        // Encode video
+        const blob = await this.encodeVideo(processedFrames);
+        
+        return blob;
+    }
+    
+    async processFrames(frames) {
+        // Use Web Worker for heavy processing
+        const worker = new Worker('worker.js');
+        
+        return new Promise((resolve) => {
+            worker.postMessage({
+                frames: frames,
+                config: {
+                    blurStrength: this.blurStrength,
+                    sampleRate: this.sampleRate,
+                    targetWords: this.targetWords
+                }
+            });
+            
+            worker.onmessage = (e) => {
+                if (e.data.type === 'progress') {
+                    this.updateProgress(e.data.percent);
+                } else if (e.data.type === 'complete') {
+                    resolve(e.data.frames);
+                }
+            };
+        });
+    }
+}
+```
+
+#### 3. Client-Side Processing
+
+**Advantages**:
+- No server upload required
+- Privacy-preserving (data stays local)
+- No server costs
+- Instant feedback
+
+**Limitations**:
+- Browser performance constraints
+- Limited to browser-supported formats
+- No GPU acceleration (typically)
+- Memory limitations
+
+### Web App Deployment
+
+**Static Hosting**:
+- Can be hosted on any static file server
+- No backend required
+- CDN-friendly
+
+**Docker Deployment**:
+- Nginx serves static files
+- Optimized caching
+- Compression enabled
+- Security headers
+
+---
+
+## Docker Architecture
+
+### Docker Deployment Overview
+
+The project uses Docker for containerized deployment of the web application and (future) API server.
+
+### Docker Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Host Machine                             │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Docker Engine                            │ │
+│  │                                                             │ │
+│  │  ┌──────────────────────────────────────────────────────┐ │ │
+│  │  │           Docker Network (webapp-network)            │ │ │
+│  │  │                                                       │ │ │
+│  │  │  ┌─────────────────────────────────────────────────┐ │ │ │
+│  │  │  │  Container: videobluring-webapp-prod           │ │ │ │
+│  │  │  │  Image: videobluring-webapp:latest             │ │ │ │
+│  │  │  │  Base: nginx:1.25-alpine                       │ │ │ │
+│  │  │  │  Port: 80 → 8080                               │ │ │ │
+│  │  │  │  ┌──────────────────────────────────────────┐  │ │ │ │
+│  │  │  │  │  Nginx Server                            │  │ │ │ │
+│  │  │  │  │  ├─ Static Files (/usr/share/nginx/html) │  │ │ │ │
+│  │  │  │  │  │  ├─ index.html                        │  │ │ │ │
+│  │  │  │  │  │  ├─ styles.css                        │  │ │ │ │
+│  │  │  │  │  │  └─ script.js                         │  │ │ │ │
+│  │  │  │  │  └─ Configuration (/etc/nginx/conf.d/)   │  │ │ │ │
+│  │  │  │  └──────────────────────────────────────────┘  │ │ │ │
+│  │  │  └─────────────────────────────────────────────────┘ │ │ │
+│  │  │                                                       │ │ │
+│  │  │  ┌─────────────────────────────────────────────────┐ │ │ │
+│  │  │  │  Container: videobluring-webapp-dev (optional) │ │ │ │
+│  │  │  │  Image: nginx:1.25-alpine                      │ │ │ │
+│  │  │  │  Port: 80 → 8081                               │ │ │ │
+│  │  │  │  Volumes: Mounted source files (live reload)   │ │ │ │
+│  │  │  └─────────────────────────────────────────────────┘ │ │ │
+│  │  │                                                       │ │ │
+│  │  │  ┌─────────────────────────────────────────────────┐ │ │ │
+│  │  │  │  Container: nginx-proxy (optional)             │ │ │ │
+│  │  │  │  Image: nginx:1.25-alpine                      │ │ │ │
+│  │  │  │  Ports: 80, 443                                │ │ │ │
+│  │  │  │  Purpose: SSL/TLS termination, reverse proxy   │ │ │ │
+│  │  │  └─────────────────────────────────────────────────┘ │ │ │
+│  │  │                                                       │ │ │
+│  │  └───────────────────────────────────────────────────────┘ │ │
+│  │                                                             │ │
+│  │  ┌──────────────────────────────────────────────────────┐ │ │
+│  │  │           Docker Volumes                              │ │ │
+│  │  │  ├─ videobluring-nginx-cache (persistent)            │ │ │
+│  │  │  └─ Bind mounts (development mode)                   │ │ │
+│  │  └──────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Docker Components
+
+#### 1. Dockerfile (Multi-Stage Build)
+
+**Stage 1: Builder**
+```dockerfile
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY index.html styles.css script.js README.md ./
+# Future: Add build steps (minification, bundling, etc.)
+```
+
+**Stage 2: Production**
+```dockerfile
+FROM nginx:1.25-alpine AS production
+RUN apk add --no-cache curl
+RUN rm -rf /usr/share/nginx/html/*
+COPY Docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/ /usr/share/nginx/html/
+RUN chown -R nginx:nginx /usr/share/nginx/html
+HEALTHCHECK CMD curl -f http://localhost:8080/ || exit 1
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+**Benefits**:
+- Smaller final image (only production files)
+- Separation of build and runtime dependencies
+- Optimized layer caching
+- Security (minimal attack surface)
+
+#### 2. Docker Compose
+
+**Service Definitions**:
+```yaml
+services:
+  # Production service
+  videobluring-webapp:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+    ports:
+      - "${APP_PORT:-8080}:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Development service (with live reload)
+  videobluring-webapp-dev:
+    image: nginx:1.25-alpine
+    ports:
+      - "${DEV_PORT:-8081}:80"
+    volumes:
+      - ../index.html:/usr/share/nginx/html/index.html:ro
+      - ../styles.css:/usr/share/nginx/html/styles.css:ro
+      - ../script.js:/usr/share/nginx/html/script.js:ro
+    profiles:
+      - development
+```
+
+#### 3. Nginx Configuration
+
+**Optimizations**:
+- Gzip compression for text files
+- Static asset caching (1 year)
+- HTML no-cache policy
+- Security headers
+- Health check endpoint
+- CORS support
+
+**Configuration Highlights**:
+```nginx
+# Compression
+gzip on;
+gzip_comp_level 6;
+gzip_types text/plain text/css text/javascript application/json;
+
+# Caching
+location ~* \.(css|js)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+
+# Security
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Content-Security-Policy "default-src 'self'..." always;
+
+# Health check
+location /health {
+    return 200 "healthy\n";
+}
+```
+
+### Docker Networking
+
+**Network Types**:
+- **Bridge Network**: Default, isolated container network
+- **Host Network**: Direct host network access (not recommended)
+- **Custom Bridge**: Named network for service discovery
+
+**Service Discovery**:
+```bash
+# Containers can communicate using service names
+curl http://videobluring-webapp-prod/health
+```
+
+### Docker Volumes
+
+**Volume Types**:
+
+1. **Named Volumes** (persistent data):
+   ```yaml
+   volumes:
+     nginx-cache:
+       driver: local
+   ```
+
+2. **Bind Mounts** (development):
+   ```yaml
+   volumes:
+     - ../index.html:/usr/share/nginx/html/index.html:ro
+   ```
+
+3. **tmpfs Mounts** (temporary data):
+   ```yaml
+   tmpfs:
+     - /tmp
+   ```
+
+### Docker Security
+
+**Security Features**:
+1. Non-root user execution
+2. Read-only file systems where possible
+3. Minimal base images (Alpine)
+4. Security scanning (Docker scan, Trivy)
+5. No secrets in images
+6. Resource limits
+
+**Security Best Practices**:
+```yaml
+services:
+  videobluring-webapp:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+```
+
+### Docker Deployment Modes
+
+**1. Development Mode**:
+- Live file reload
+- Debug logging
+- No optimization
+- Port 8081
+
+**2. Production Mode**:
+- Optimized build
+- Compressed assets
+- Health checks
+- Port 8080
+
+**3. Proxy Mode**:
+- SSL/TLS termination
+- Load balancing
+- Ports 80, 443
 
 #### Text Detection Results
 ```python
@@ -877,9 +1533,22 @@ Future: Distributed, parallel processing
 
 ## See Also
 
-- [API_REFERENCE.md](API_REFERENCE.md) - API documentation
+- [API_REFERENCE.md](API_REFERENCE.md) - Complete API documentation
+- [SWAGGER_API.md](SWAGGER_API.md) - REST API and OpenAPI specification
+- [DOCKER.md](DOCKER.md) - Docker deployment guide
 - [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) - Technical details
+- [INSTALLATION.md](INSTALLATION.md) - Installation guide
 - [README.md](README.md) - User guide
+- [swagger/README.md](../swagger/README.md) - REST API server documentation
+- [swagger/openapi.yaml](../swagger/openapi.yaml) - OpenAPI specification
+- [VideoBluring WebApp/Docker/README.md](../VideoBluring%20WebApp/Docker/README.md) - Docker setup guide
+
+---
+
+**Architecture Version**: 2.0.0
+**Last Updated**: February 23, 2026
+**Status**: Current
+**Includes**: Python API, REST API, Web Application, Docker Architecture
 
 ---
 
